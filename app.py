@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from io import BytesIO
 
-# ------------------ PAGE CONFIG ------------------
+# -------------------- PAGE CONFIG --------------------
 st.set_page_config(
     page_title="Invoice Reconciliation Dashboard",
     layout="wide"
@@ -11,10 +11,9 @@ st.set_page_config(
 
 st.title("📊 Invoice Reconciliation Dashboard")
 st.markdown("Upload Seller and Vendor SOA files to perform reconciliation.")
-
 st.divider()
 
-# ------------------ FILE UPLOAD ------------------
+# -------------------- FILE UPLOAD --------------------
 col1, col2 = st.columns(2)
 
 with col1:
@@ -23,7 +22,6 @@ with col1:
 with col2:
     vendor_file = st.file_uploader("📕 Upload Vendor SOA", type=["xlsx"])
 
-# Threshold Input
 threshold = st.number_input(
     "💰 Acceptable Difference Threshold (₹)",
     min_value=0,
@@ -35,11 +33,11 @@ if not seller_file or not vendor_file:
     st.info("⬆️ Please upload both files to continue.")
     st.stop()
 
-# ------------------ READ FILES ------------------
+# -------------------- READ FILES --------------------
 seller_df = pd.read_excel(seller_file)
 vendor_df = pd.read_excel(vendor_file)
 
-# ------------------ RENAME COLUMNS ------------------
+# -------------------- RENAME COLUMNS --------------------
 seller_df = seller_df.rename(columns={
     "Invoice_No": "Seller_Invoice_No",
     "Invoice_Amount": "Seller_Invoice_Amount"
@@ -50,7 +48,7 @@ vendor_df = vendor_df.rename(columns={
     "Invoice_Amount": "Vendor_Invoice_Amount"
 })
 
-# ------------------ MERGE ------------------
+# -------------------- MERGE --------------------
 recon_df = pd.merge(
     seller_df,
     vendor_df,
@@ -59,12 +57,12 @@ recon_df = pd.merge(
     how="outer"
 )
 
-# ------------------ AMOUNT DIFFERENCE ------------------
+# -------------------- AMOUNT DIFFERENCE --------------------
 recon_df["Amount_Difference"] = abs(
     recon_df["Seller_Invoice_Amount"] - recon_df["Vendor_Invoice_Amount"]
 )
 
-# ------------------ STATUS LOGIC ------------------
+# -------------------- STATUS LOGIC --------------------
 def get_status(row):
     if pd.isna(row["Seller_Invoice_No"]):
         return "Missing in Seller Books"
@@ -79,7 +77,7 @@ def get_status(row):
 
 recon_df["Status"] = recon_df.apply(get_status, axis=1)
 
-# ------------------ FINAL TABLE ------------------
+# -------------------- FINAL TABLE --------------------
 final_df = recon_df[[
     "Seller_Invoice_No",
     "Seller_Invoice_Amount",
@@ -89,7 +87,12 @@ final_df = recon_df[[
     "Status"
 ]]
 
-# ------------------ SUMMARY METRICS ------------------
+# ----------- RESET INDEX TO START FROM 1 ------------
+final_df = final_df.reset_index(drop=True)
+final_df.index = final_df.index + 1
+final_df.index.name = "S.No"
+
+# -------------------- SUMMARY METRICS --------------------
 st.divider()
 st.subheader("📌 Reconciliation Summary")
 
@@ -97,29 +100,29 @@ total_invoices = len(final_df)
 matched = (final_df["Status"] == "Matched").sum()
 within_threshold = (final_df["Status"] == "Within Threshold").sum()
 mismatch = (final_df["Status"] == "Amount Mismatch").sum()
-missing = ((final_df["Status"] == "Missing in Seller Books") |
-           (final_df["Status"] == "Missing in Vendor Books")).sum()
-
+missing_seller = (final_df["Status"] == "Missing in Seller Books").sum()
+missing_vendor = (final_df["Status"] == "Missing in Vendor Books").sum()
 total_difference = final_df["Amount_Difference"].sum()
 
-m1, m2, m3, m4, m5 = st.columns(5)
+m1, m2, m3, m4, m5, m6 = st.columns(6)
 
 m1.metric("Total Invoices", total_invoices)
 m2.metric("Matched", matched)
 m3.metric("Within Threshold", within_threshold)
-m4.metric("Mismatch", mismatch)
-m5.metric("Missing", missing)
+m4.metric("Mismatch (>Threshold)", mismatch)
+m5.metric("Missing in Seller", missing_seller)
+m6.metric("Missing in Vendor", missing_vendor)
 
 st.metric("💰 Total Difference (₹)", f"{total_difference:,.2f}")
 
-# ------------------ DISPLAY TABLE ------------------
+# -------------------- DISPLAY TABLE --------------------
 st.divider()
 st.subheader("📋 Detailed Reconciliation Result")
 st.dataframe(final_df, use_container_width=True)
 
-# ------------------ DOWNLOAD BUTTON ------------------
+# -------------------- DOWNLOAD BUTTON --------------------
 output = BytesIO()
-final_df.to_excel(output, index=False, engine="openpyxl")
+final_df.to_excel(output, index=True, engine="openpyxl")
 output.seek(0)
 
 st.download_button(
