@@ -43,14 +43,14 @@ def detect_and_standardize_columns(df, file_label):
 
     invoice_keywords = [
         "invoice_no", "invoice number", "invoice no", "inv no",
-        "document_no", "document number", "document no", "voucher no",
+        "document_no", "document number", "document no", "voucher no.",
         "number", "bill no", "vendor invoice No.", "Vch No."
     ]
 
     amount_keywords = [
         "invoice_amount", "invoice amount", "amount", "amt",
         "document_amount", "document amount", "total amount",
-        "value", "net amount"
+        "value", "net amount", "gross total", "net"
     ]
 
     invoice_col = None
@@ -183,5 +183,6 @@ st.download_button(
     file_name="Invoice_Reconciliation_Report.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
