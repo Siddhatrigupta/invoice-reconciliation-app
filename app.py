@@ -30,64 +30,22 @@ if not seller_file or not vendor_file:
     st.info("⬆️ Please upload both files to continue.")
     st.stop()
 
-# =========================================================
-# DETECT HEADER ROW
-# =========================================================
-def detect_header_row(file):
-    raw = pd.read_excel(file, header=None)
-
-    for i in range(len(raw)):
-        row = raw.iloc[i].astype(str).str.lower()
-        if "voucher type" in row.values or "vch type" in row.values:
-            return i
-    return None
-
-
-# =========================================================
-# GET VOUCHER TYPES FOR DROPDOWN
-# =========================================================
-
-header_row_vendor = detect_header_row(vendor_file)
-
-if header_row_vendor is None:
-    st.error("❌ Could not detect header row in Vendor file.")
-    st.stop()
-
-vendor_temp = pd.read_excel(vendor_file, header=header_row_vendor)
-vendor_temp.columns = vendor_temp.columns.str.strip()
-
-if "Voucher Type" in vendor_temp.columns:
-    voucher_col_name = "Voucher Type"
-elif "Vch Type" in vendor_temp.columns:
-    voucher_col_name = "Vch Type"
-else:
-    st.error("❌ Voucher Type column not found in Vendor file.")
-    st.stop()
-
-voucher_types = (
-    vendor_temp[voucher_col_name]
-    .dropna()
-    .astype(str)
-    .unique()
-    .tolist()
-)
-
-voucher_types = ["All"] + sorted(voucher_types)
-
-selected_voucher = st.selectbox(
-    "📂 Select Voucher Type",
-    voucher_types
-)
-
-st.divider()
 
 # =========================================================
 # COMMON LEDGER PROCESSOR
 # =========================================================
 
-def process_ledger(file, side_name, selected_voucher):
+def process_ledger(file, side_name):
 
-    header_row = detect_header_row(file)
+    # Detect header row
+    raw = pd.read_excel(file, header=None)
+
+    header_row = None
+    for i in range(len(raw)):
+        row = raw.iloc[i].astype(str).str.lower()
+        if "voucher type" in row.values or "vch type" in row.values:
+            header_row = i
+            break
 
     if header_row is None:
         st.error(f"❌ Could not detect header row in {side_name} file.")
@@ -96,20 +54,16 @@ def process_ledger(file, side_name, selected_voucher):
     df = pd.read_excel(file, header=header_row)
     df.columns = df.columns.str.strip()
 
-    # Identify voucher + invoice column
+    # Keep Purchase only
     if "Voucher Type" in df.columns:
-        voucher_col = "Voucher Type"
+        df = df[df["Voucher Type"].astype(str).str.lower() == "purchase"]
         invoice_col = "Voucher No."
     elif "Vch Type" in df.columns:
-        voucher_col = "Vch Type"
+        df = df[df["Vch Type"].astype(str).str.lower() == "purchase"]
         invoice_col = "Vch No."
     else:
         st.error(f"❌ Voucher Type column missing in {side_name} file.")
         st.stop()
-
-    # Apply dropdown filter
-    if selected_voucher != "All":
-        df = df[df[voucher_col].astype(str) == selected_voucher]
 
     # Format 1: Gross Total present
     if "Gross Total" in df.columns:
@@ -146,9 +100,10 @@ def process_ledger(file, side_name, selected_voucher):
 
 
 # Process both files
-seller_df = process_ledger(seller_file, "Seller", selected_voucher)
-vendor_df = process_ledger(vendor_file, "Vendor", selected_voucher)
+seller_df = process_ledger(seller_file, "Seller")
+vendor_df = process_ledger(vendor_file, "Vendor")
 
+# Rename invoice column for merge clarity
 seller_df = seller_df.rename(columns={"Invoice_No": "Seller_Invoice_No"})
 vendor_df = vendor_df.rename(columns={"Invoice_No": "Vendor_Invoice_No"})
 
@@ -164,7 +119,6 @@ recon_df = pd.merge(
     how="outer"
 )
 
-# SIGN-AWARE DIFFERENCE
 recon_df["Amount_Difference"] = abs(
     recon_df["Seller_Invoice_Amount"] +
     recon_df["Vendor_Invoice_Amount"]
@@ -201,6 +155,7 @@ final_df.index.name = "S.No"
 # SUMMARY
 # =========================================================
 
+st.divider()
 st.subheader("📌 Reconciliation Summary")
 
 m1, m2, m3, m4, m5, m6 = st.columns(6)
