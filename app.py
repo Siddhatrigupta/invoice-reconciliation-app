@@ -35,72 +35,97 @@ if not seller_file or not vendor_file:
 
 # -------------------- READ FILES --------------------
 seller_df = pd.read_excel(seller_file)
-vendor_df = pd.read_excel(vendor_file)
+vendor_raw_df = pd.read_excel(vendor_file)
 
-# -------------------- SMART COLUMN DETECTION --------------------
-def detect_and_standardize_columns(df, file_label):
+# =====================================================
+# 1️⃣ PROCESS SELLER FILE (NORMAL INVOICE FORMAT)
+# =====================================================
+
+def detect_seller_columns(df):
     df.columns = df.columns.str.strip().str.lower()
 
-    invoice_keywords = [
-        "invoice_no", "invoice number", "invoice no", "inv no",
-        "document_no", "document number", "document no", "voucher no.",
-        "number", "bill no", "vendor invoice No.", "Vch No."
-    ]
-
-    amount_keywords = [
-        "invoice_amount", "invoice amount", "amount", "amt",
-        "document_amount", "document amount", "total amount",
-        "value", "net amount", "gross total", "net"
-    ]
+    invoice_keywords = ["invoice", "document", "number", "no."]
+    amount_keywords = ["amount", "amt", "total", "net"]
 
     invoice_col = None
     amount_col = None
 
-    # Detect invoice column
     for col in df.columns:
-        for keyword in invoice_keywords:
-            if keyword in col:
+        for key in invoice_keywords:
+            if key in col:
                 invoice_col = col
                 break
         if invoice_col:
             break
 
-    # Detect amount column
     for col in df.columns:
-        for keyword in amount_keywords:
-            if keyword in col:
+        for key in amount_keywords:
+            if key in col:
                 amount_col = col
                 break
         if amount_col:
             break
 
     if not invoice_col or not amount_col:
-        st.error(f"❌ Could not detect required columns in {file_label} file.")
-        st.write("Detected columns:", df.columns.tolist())
+        st.error("❌ Could not detect required columns in Seller file.")
         st.stop()
 
     df = df.rename(columns={
-        invoice_col: "Invoice_No",
-        amount_col: "Invoice_Amount"
+        invoice_col: "Seller_Invoice_No",
+        amount_col: "Seller_Invoice_Amount"
     })
 
-    return df
+    df["Seller_Invoice_Amount"] = pd.to_numeric(
+        df["Seller_Invoice_Amount"], errors="coerce"
+    ).fillna(0)
 
-seller_df = detect_and_standardize_columns(seller_df, "Seller")
-vendor_df = detect_and_standardize_columns(vendor_df, "Vendor")
+    return df[["Seller_Invoice_No", "Seller_Invoice_Amount"]]
 
-# -------------------- FINAL RENAME FOR MERGE --------------------
-seller_df = seller_df.rename(columns={
-    "Invoice_No": "Seller_Invoice_No",
-    "Invoice_Amount": "Seller_Invoice_Amount"
-})
+seller_df = detect_seller_columns(seller_df)
 
-vendor_df = vendor_df.rename(columns={
-    "Invoice_No": "Vendor_Invoice_No",
-    "Invoice_Amount": "Vendor_Invoice_Amount"
-})
+# =====================================================
+# 2️⃣ PROCESS VENDOR FILE (LEDGER FORMAT)
+# =====================================================
 
-# -------------------- MERGE --------------------
+def process_vendor_ledger(df):
+
+    df.columns = df.columns.str.strip()
+
+    required_cols = ["Vch Type", "Vch No.", "Debit", "Credit"]
+
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"❌ Required column '{col}' not found in Vendor file.")
+            st.stop()
+
+    # Keep only Purchase vouchers
+    df = df[df["Vch Type"].str.lower() == "purchase"]
+
+    # Convert Debit & Credit to numeric
+    df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce").fillna(0)
+    df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce").fillna(0)
+
+    # Group by voucher number
+    summary = df.groupby("Vch No.", as_index=False).agg({
+        "Debit": "sum",
+        "Credit": "sum"
+    })
+
+    # Net amount
+    summary["Vendor_Invoice_Amount"] = summary["Debit"] - summary["Credit"]
+
+    summary = summary.rename(columns={
+        "Vch No.": "Vendor_Invoice_No"
+    })
+
+    return summary[["Vendor_Invoice_No", "Vendor_Invoice_Amount"]]
+
+vendor_df = process_vendor_ledger(vendor_raw_df)
+
+# =====================================================
+# 3️⃣ MERGE
+# =====================================================
+
 recon_df = pd.merge(
     seller_df,
     vendor_df,
@@ -183,6 +208,3 @@ st.download_button(
     file_name="Invoice_Reconciliation_Report.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
-
-
