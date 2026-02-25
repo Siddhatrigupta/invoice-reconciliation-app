@@ -120,7 +120,7 @@ recon_df = pd.merge(
 )
 
 recon_df["Amount_Difference"] = abs(
-    recon_df["Seller_Invoice_Amount"] -
+    recon_df["Seller_Invoice_Amount"] +
     recon_df["Vendor_Invoice_Amount"]
 )
 
@@ -183,3 +183,4 @@ st.download_button(
     file_name="Invoice_Reconciliation_Report.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
