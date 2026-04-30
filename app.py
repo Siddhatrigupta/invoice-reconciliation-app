@@ -37,12 +37,13 @@ if not seller_file or not vendor_file:
 
 def process_ledger(file, side_name):
 
+    # Detect header row
     raw = pd.read_excel(file, header=None)
 
     header_row = None
     for i in range(len(raw)):
         row = raw.iloc[i].astype(str).str.lower()
-        if any("type" in cell for cell in row):
+        if "voucher type" in row.values or "vch type" in row.values:
             header_row = i
             break
 
@@ -53,109 +54,42 @@ def process_ledger(file, side_name):
     df = pd.read_excel(file, header=header_row)
     df.columns = df.columns.str.strip()
 
-    # -----------------------------------------------------
-    # Dynamic Column Detection
-    # -----------------------------------------------------
-
-    cols_lower = {col.lower(): col for col in df.columns}
-
-    # Voucher Type column detection
-    voucher_type_keywords = ["voucher type", "vch type", "document type", "type"]
-    voucher_col = None
-    for key in voucher_type_keywords:
-        for col in df.columns:
-            if key in col.lower():
-                voucher_col = col
-                break
-        if voucher_col:
-            break
-
-    if voucher_col is None:
-        st.error(f"❌ Voucher Type column not found in {side_name} file.")
-        st.stop()
-
     # Keep Purchase only
-    df = df[df[voucher_col].astype(str).str.lower().str.contains("purchase")]
-
-    # Invoice column detection
-    invoice_keywords = [
-        "voucher no", "vch no", "document no",
-        "invoice no", "bill no", "number"
-    ]
-
-    invoice_col = None
-    for key in invoice_keywords:
-        for col in df.columns:
-            if key in col.lower():
-                invoice_col = col
-                break
-        if invoice_col:
-            break
-
-    if invoice_col is None:
-        st.error(f"❌ Invoice number column not found in {side_name} file.")
+    if "Voucher Type" in df.columns:
+        df = df[df["Voucher Type"].astype(str).str.lower() == "purchase"]
+        invoice_col = "Voucher No."
+    elif "Vch Type" in df.columns:
+        df = df[df["Vch Type"].astype(str).str.lower() == "purchase"]
+        invoice_col = "Vch No."
+    else:
+        st.error(f"❌ Voucher Type column missing in {side_name} file.")
         st.stop()
 
-    # -----------------------------------------------------
-    # Amount Detection
-    # -----------------------------------------------------
+    # Format 1: Gross Total present
+    if "Gross Total" in df.columns:
+        df["Invoice_Amount"] = pd.to_numeric(
+            df["Gross Total"], errors="coerce"
+        ).fillna(0)
 
-    # Case 1: Debit/Credit present
-    debit_col = None
-    credit_col = None
+        summary = df.groupby(invoice_col, as_index=False)["Invoice_Amount"].sum()
 
-    for col in df.columns:
-        if "debit" in col.lower():
-            debit_col = col
-        if "credit" in col.lower():
-            credit_col = col
+    # Format 2: Debit/Credit present
+    elif "Debit" in df.columns and "Credit" in df.columns:
 
-    if debit_col and credit_col:
-
-        df[debit_col] = pd.to_numeric(df[debit_col], errors="coerce").fillna(0)
-        df[credit_col] = pd.to_numeric(df[credit_col], errors="coerce").fillna(0)
+        df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce").fillna(0)
+        df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce").fillna(0)
 
         summary = df.groupby(invoice_col, as_index=False).agg({
-            debit_col: "sum",
-            credit_col: "sum"
+            "Debit": "sum",
+            "Credit": "sum"
         })
 
-        summary["Invoice_Amount"] = (
-            summary[debit_col] - summary[credit_col]
-        )
-
+        summary["Invoice_Amount"] = summary["Debit"] - summary["Credit"]
         summary = summary[[invoice_col, "Invoice_Amount"]]
 
     else:
-        # Case 2: Direct amount column
-        amount_keywords = [
-            "gross total", "net amount",
-            "amount", "total", "value"
-        ]
-
-        amount_col = None
-        for key in amount_keywords:
-            for col in df.columns:
-                if key in col.lower():
-                    amount_col = col
-                    break
-            if amount_col:
-                break
-
-        if amount_col is None:
-            st.error(f"❌ Amount column not found in {side_name} file.")
-            st.stop()
-
-        df[amount_col] = pd.to_numeric(
-            df[amount_col], errors="coerce"
-        ).fillna(0)
-
-        summary = df.groupby(invoice_col, as_index=False)[amount_col].sum()
-        summary = summary.rename(columns={amount_col: "Invoice_Amount"})
-
-    # -----------------------------------------------------
-    # Final Rename
-    # -----------------------------------------------------
+        st.error(f"❌ Amount columns not found in {side_name} file.")
+        st.stop()
 
     summary = summary.rename(columns={
         invoice_col: "Invoice_No",
@@ -163,6 +97,7 @@ def process_ledger(file, side_name):
     })
 
     return summary
+
 
 # Process both files
 seller_df = process_ledger(seller_file, "Seller")
@@ -248,4 +183,3 @@ st.download_button(
     file_name="Invoice_Reconciliation_Report.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
