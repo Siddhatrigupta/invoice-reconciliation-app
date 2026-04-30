@@ -164,7 +164,7 @@ recon_df = pd.merge(
 
 # 🔥 FIXED DIFFERENCE LOGIC
 recon_df["Amount_Difference"] = abs(
-    recon_df["Seller_Invoice_Amount"].fillna(0) -
+    recon_df["Seller_Invoice_Amount"].fillna(0) +
     recon_df["Vendor_Invoice_Amount"].fillna(0)
 )
 
