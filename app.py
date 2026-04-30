@@ -111,7 +111,7 @@ def process_ledger(file, side_name):
         summary = summary[[invoice_col, "Invoice_Amount"]]
 
     else:
-        amount_keywords = ["gross total", "net amount", "amount", "total", "value"]
+        amount_keywords = ["gross total", "net amount", "amount", "total", "gross total"]
 
         amount_col = next(
             (col for col in df.columns for key in amount_keywords if key in col.lower()),
