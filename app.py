@@ -8,7 +8,7 @@ st.set_page_config(
 )
 
 st.title("📊 Reconciliation Dashboard")
-st.markdown("Upload Seller and Vendor SOA files to perform reconciliation.")
+st.markdown("Upload both files to perform reconciliation.")
 st.divider()
 
 col1, col2 = st.columns(2)
@@ -39,7 +39,7 @@ def process_ledger(file, side_name):
 
     raw = pd.read_excel(file, header=None)
 
-    # 🔥 FIXED HEADER DETECTION
+    # Header detection
     header_row = None
     for i in range(len(raw)):
         row = raw.iloc[i].values
@@ -56,11 +56,9 @@ def process_ledger(file, side_name):
     df = pd.read_excel(file, header=header_row)
     df.columns = df.columns.astype(str).str.strip()
 
-    # -----------------------------------------------------
-    # COLUMN DETECTION
-    # -----------------------------------------------------
-
-    # Voucher Type
+    # -----------------------------
+    # Voucher Type Detection
+    # -----------------------------
     voucher_type_keywords = ["voucher type", "vch type", "document type", "type"]
     voucher_col = next(
         (col for col in df.columns for key in voucher_type_keywords if key in col.lower()),
@@ -71,10 +69,11 @@ def process_ledger(file, side_name):
         st.error(f"❌ Voucher Type column not found in {side_name} file.")
         st.stop()
 
-    # Keep Purchase only
-    df = df[df[voucher_col].astype(str).str.lower().str.contains("purchase", na=False)]
+    df["Voucher_Type"] = df[voucher_col].astype(str)
 
-    # Invoice column
+    # -----------------------------
+    # Invoice Column Detection
+    # -----------------------------
     invoice_keywords = [
         "voucher no", "vch no", "document no",
         "invoice no", "bill no", "number"
@@ -89,10 +88,9 @@ def process_ledger(file, side_name):
         st.error(f"❌ Invoice number column not found in {side_name} file.")
         st.stop()
 
-    # -----------------------------------------------------
-    # AMOUNT LOGIC
-    # -----------------------------------------------------
-
+    # -----------------------------
+    # Amount Logic
+    # -----------------------------
     debit_col = next((col for col in df.columns if "debit" in col.lower()), None)
     credit_col = next((col for col in df.columns if "credit" in col.lower()), None)
 
@@ -101,22 +99,36 @@ def process_ledger(file, side_name):
         df[debit_col] = pd.to_numeric(df[debit_col], errors="coerce").fillna(0)
         df[credit_col] = pd.to_numeric(df[credit_col], errors="coerce").fillna(0)
 
-        summary = df.groupby(invoice_col, as_index=False).agg({
+        summary = df.groupby([invoice_col, "Voucher_Type"], as_index=False).agg({
             debit_col: "sum",
             credit_col: "sum"
         })
 
         summary["Invoice_Amount"] = summary[debit_col] - summary[credit_col]
 
-        summary = summary[[invoice_col, "Invoice_Amount"]]
-
     else:
-        amount_keywords = ["gross total", "net amount", "amount", "total", "gross total"]
+        # PRIORITY-BASED AMOUNT DETECTION
+        priority_keywords = [
+            ["gross total"],
+            ["gross amount"],
+            ["amount"],
+            ["net amount"],
+            ["total"],
+            ["value"]
+        ]
 
-        amount_col = next(
-            (col for col in df.columns for key in amount_keywords if key in col.lower()),
-            None
-        )
+        amount_col = None
+
+        for keyword_group in priority_keywords:
+            for key in keyword_group:
+                for col in df.columns:
+                    if key in col.lower():
+                        amount_col = col
+                        break
+                if amount_col:
+                    break
+            if amount_col:
+                break
 
         if amount_col is None:
             st.error(f"❌ Amount column not found in {side_name} file.")
@@ -124,15 +136,15 @@ def process_ledger(file, side_name):
 
         df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
-        summary = df.groupby(invoice_col, as_index=False)[amount_col].sum()
+        summary = df.groupby([invoice_col, "Voucher_Type"], as_index=False)[amount_col].sum()
         summary = summary.rename(columns={amount_col: "Invoice_Amount"})
 
-    # -----------------------------------------------------
-    # FINAL CLEAN
-    # -----------------------------------------------------
-
+    # -----------------------------
+    # Final Rename
+    # -----------------------------
     summary = summary.rename(columns={
         invoice_col: "Invoice_No",
+        "Voucher_Type": f"{side_name}_Voucher_Type",
         "Invoice_Amount": f"{side_name}_Invoice_Amount"
     })
 
@@ -162,7 +174,7 @@ recon_df = pd.merge(
     how="outer"
 )
 
-# 🔥 FIXED DIFFERENCE LOGIC
+# Accounting-based difference (SUM logic)
 recon_df["Amount_Difference"] = abs(
     recon_df["Seller_Invoice_Amount"].fillna(0) +
     recon_df["Vendor_Invoice_Amount"].fillna(0)
@@ -186,8 +198,10 @@ recon_df["Status"] = recon_df.apply(get_status, axis=1)
 
 final_df = recon_df[[
     "Seller_Invoice_No",
+    "Seller_Voucher_Type",
     "Seller_Invoice_Amount",
     "Vendor_Invoice_No",
+    "Vendor_Voucher_Type",
     "Vendor_Invoice_Amount",
     "Amount_Difference",
     "Status"
@@ -229,6 +243,6 @@ output.seek(0)
 st.download_button(
     label="⬇️ Download Reconciliation Report",
     data=output,
-    file_name="Invoice_Reconciliation_Report.xlsx",
+    file_name="Reconciliation_Report.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
