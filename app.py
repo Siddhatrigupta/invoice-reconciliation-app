@@ -106,6 +106,12 @@ def process_ledger(file, side_name):
 
         summary["Invoice_Amount"] = summary[debit_col] - summary[credit_col]
 
+# 🔥 FORCE SELLER TO NEGATIVE
+if side_name == "Seller":
+    summary["Invoice_Amount"] = summary["Invoice_Amount"].apply(
+        lambda x: -abs(x) if x > 0 else x
+    )
+
     else:
         # PRIORITY-BASED AMOUNT DETECTION
         priority_keywords = [
