@@ -169,8 +169,8 @@ vendor_df = vendor_df.rename(columns={"Invoice_No": "Vendor_Invoice_No"})
 recon_df = pd.merge(
     seller_df,
     vendor_df,
-    left_on="Seller_Invoice_No",
-    right_on="Vendor_Invoice_No",
+    left_on=["Seller_Invoice_No", "Seller_Voucher_Type"],
+    right_on=["Vendor_Invoice_No", "Vendor_Voucher_Type"],
     how="outer"
 )
 
