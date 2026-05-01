@@ -3,21 +3,21 @@ import pandas as pd
 from io import BytesIO
 
 st.set_page_config(
-    page_title="Invoice Reconciliation Dashboard",
+    page_title="Reconciliation Dashboard",
     layout="wide"
 )
 
-st.title("📊 Invoice Reconciliation Dashboard")
+st.title("📊 Reconciliation Dashboard")
 st.markdown("Upload Seller and Vendor SOA files to perform reconciliation.")
 st.divider()
 
 col1, col2 = st.columns(2)
 
 with col1:
-    seller_file = st.file_uploader("📘 Upload Seller SOA", type=["xlsx"])
+    seller_file = st.file_uploader("📘 Upload File 1", type=["xlsx"])
 
 with col2:
-    vendor_file = st.file_uploader("📕 Upload Vendor SOA", type=["xlsx"])
+    vendor_file = st.file_uploader("📕 Upload File 2", type=["xlsx"])
 
 threshold = st.number_input(
     "💰 Acceptable Difference Threshold (₹)",
