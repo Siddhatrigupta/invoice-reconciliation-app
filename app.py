@@ -106,12 +106,6 @@ def process_ledger(file, side_name):
 
         summary["Invoice_Amount"] = summary[debit_col] - summary[credit_col]
 
-# 🔥 FORCE SELLER TO NEGATIVE
-if side_name == "Seller":
-    summary["Invoice_Amount"] = summary["Invoice_Amount"].apply(
-        lambda x: -abs(x) if x > 0 else x
-    )
-
     else:
         # PRIORITY-BASED AMOUNT DETECTION
         priority_keywords = [
@@ -143,11 +137,13 @@ if side_name == "Seller":
         df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
         summary = df.groupby([invoice_col, "Voucher_Type"], as_index=False)[amount_col].sum()
-        if side_name == "Seller":
-    summary["Invoice_Amount"] = summary["Invoice_Amount"].apply(
-        lambda x: -abs(x)
-    )
         summary = summary.rename(columns={amount_col: "Invoice_Amount"})
+
+    # -----------------------------
+    # 🔥 FORCE SELLER NEGATIVE (AFTER amount is created)
+    # -----------------------------
+    if side_name == "Seller":
+        summary["Invoice_Amount"] = -summary["Invoice_Amount"].abs()
 
     # -----------------------------
     # Final Rename
@@ -173,7 +169,7 @@ vendor_df = vendor_df.rename(columns={"Invoice_No": "Vendor_Invoice_No"})
 
 
 # =========================================================
-# MERGE
+# MERGE (🔥 FIXED - voucher aware)
 # =========================================================
 
 recon_df = pd.merge(
@@ -184,7 +180,7 @@ recon_df = pd.merge(
     how="outer"
 )
 
-# Accounting-based difference (SUM logic)
+# SUM-based difference (accounting logic)
 recon_df["Amount_Difference"] = abs(
     recon_df["Seller_Invoice_Amount"].fillna(0) +
     recon_df["Vendor_Invoice_Amount"].fillna(0)
