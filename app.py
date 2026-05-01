@@ -143,6 +143,10 @@ if side_name == "Seller":
         df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
         summary = df.groupby([invoice_col, "Voucher_Type"], as_index=False)[amount_col].sum()
+        if side_name == "Seller":
+    summary["Invoice_Amount"] = summary["Invoice_Amount"].apply(
+        lambda x: -abs(x)
+    )
         summary = summary.rename(columns={amount_col: "Invoice_Amount"})
 
     # -----------------------------
