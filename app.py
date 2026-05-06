@@ -241,7 +241,7 @@ st.subheader("📋 Detailed Reconciliation Results")
 status_options = ["All"] + sorted(final_df["Status"].unique().tolist())
 selected_status = st.selectbox("Filter by status", status_options)
 
-search_query = st.text_input("🔍 Search by invoice number or voucher type", "")
+search_query = st.text_input("🔍 Search by invoice number, voucher type or status", "")
 
 display_df = final_df.copy()
 
@@ -253,6 +253,7 @@ if search_query:
     mask = (
         display_df["Invoice_No"].astype(str).str.lower().str.contains(q, na=False)
         | display_df["Voucher_Type"].astype(str).str.lower().str.contains(q, na=False)
+        | display_df["Status"].astype(str).str.lower().str.contains(q, na=False)
     )
     display_df = display_df[mask]
 
